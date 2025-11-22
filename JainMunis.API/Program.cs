@@ -6,6 +6,8 @@ using Serilog;
 using System.Text;
 using JainMunis.API.Data;
 using JainMunis.API.Services;
+using JainMunis.API.Models.Entities;
+using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 

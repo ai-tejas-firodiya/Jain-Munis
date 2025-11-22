@@ -1,5 +1,5 @@
 using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jokens;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 
@@ -25,14 +25,14 @@ public class JwtService : IJwtService
         _expirationHours = int.Parse(_configuration.GetSection("JwtSettings:ExpirationHours").Value ?? "24");
     }
 
-    public string GenerateToken(string username, Guid userId, string email, string role)
+    public string GenerateToken(string username, string userId, string email, string role)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.UTF8.GetBytes(_secretKey);
 
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.NameIdentifier, userId),
             new Claim(ClaimTypes.Name, username),
             new Claim(ClaimTypes.Email, email),
             new Claim(ClaimTypes.Role, role),

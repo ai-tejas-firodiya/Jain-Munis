@@ -43,7 +43,7 @@ public class AuthService : IAuthService
 
         var userDto = new UserDto
         {
-            Id = user.Id,
+            Id = Guid.Parse(user.Id),
             Username = user.UserName!,
             Email = user.Email!,
             Role = user.Role ?? "admin",
@@ -69,7 +69,7 @@ public class AuthService : IAuthService
 
         return new UserDto
         {
-            Id = user.Id,
+            Id = userId,
             Username = user.UserName!,
             Email = user.Email!,
             Role = user.Role ?? "admin",
@@ -88,7 +88,7 @@ public class AuthService : IAuthService
 
         return new UserDto
         {
-            Id = user.Id,
+            Id = Guid.Parse(user.Id),
             Username = user.UserName!,
             Email = user.Email!,
             Role = user.Role ?? "admin",
@@ -101,7 +101,7 @@ public class AuthService : IAuthService
     {
         var activityLog = new ActivityLog
         {
-            AdminUserId = adminUserId,
+            AdminUserId = adminUserId?.ToString(),
             Action = action,
             EntityType = entityType,
             EntityId = entityId,

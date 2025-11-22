@@ -73,7 +73,7 @@ public class ScheduleService : IScheduleService
         return schedule != null ? ConvertToDto(schedule) : null;
     }
 
-    public async Task<ScheduleDto> CreateScheduleAsync(CreateScheduleRequest request, Guid? createdBy)
+    public async Task<ScheduleDto> CreateScheduleAsync(CreateScheduleRequest request, string? createdBy)
     {
         // Check for overlapping schedules
         var overlaps = await CheckOverlapsAsync(request.SaintId, request.StartDate, request.EndDate);
@@ -101,8 +101,9 @@ public class ScheduleService : IScheduleService
         await _context.SaveChangesAsync();
 
         // Log activity
+        var createdByGuid = !string.IsNullOrEmpty(createdBy) && Guid.TryParse(createdBy, out var guidId) ? guidId : (Guid?)null;
         await _authService.LogActivityAsync(
-            createdBy,
+            createdByGuid,
             "CREATE_SCHEDULE",
             "schedule",
             schedule.Id,
@@ -122,7 +123,7 @@ public class ScheduleService : IScheduleService
         return await GetScheduleByIdAsync(schedule.Id) ?? throw new InvalidOperationException("Failed to create schedule");
     }
 
-    public async Task<ScheduleDto?> UpdateScheduleAsync(Guid id, UpdateScheduleRequest request, Guid? updatedBy)
+    public async Task<ScheduleDto?> UpdateScheduleAsync(Guid id, UpdateScheduleRequest request, string? updatedBy)
     {
         var schedule = await _context.Schedules.FindAsync(id);
         if (schedule == null)
@@ -187,8 +188,9 @@ public class ScheduleService : IScheduleService
         await _context.SaveChangesAsync();
 
         // Log activity
+        var updatedByGuid = !string.IsNullOrEmpty(updatedBy) && Guid.TryParse(updatedBy, out var guidId) ? guidId : (Guid?)null;
         await _authService.LogActivityAsync(
-            updatedBy,
+            updatedByGuid,
             "UPDATE_SCHEDULE",
             "schedule",
             schedule.Id,
@@ -312,14 +314,14 @@ public class ScheduleService : IScheduleService
     public async Task<List<ScheduleDto>> CheckOverlapsAsync(Guid saintId, DateOnly startDate, DateOnly endDate, Guid? excludeScheduleId = null)
     {
         var query = _context.Schedules
+            .Include(sc => sc.Saint)
+            .Include(sc => sc.Location)
             .Where(sc => sc.SaintId == saintId)
             .Where(sc =>
                 (sc.StartDate <= startDate && sc.EndDate >= startDate) || // Schedule starts during existing schedule
                 (sc.StartDate <= endDate && sc.EndDate >= endDate) ||     // Schedule ends during existing schedule
                 (sc.StartDate >= startDate && sc.EndDate <= endDate)       // Schedule is completely within new schedule
-            )
-            .Include(sc => sc.Saint)
-            .Include(sc => sc.Location);
+            );
 
         if (excludeScheduleId.HasValue)
         {
