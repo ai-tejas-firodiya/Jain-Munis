@@ -130,5 +130,149 @@ public class ApplicationDbContext : IdentityDbContext<AdminUser>
         modelBuilder.Entity<NotificationSubscription>()
             .HasIndex(ns => ns.UserIdentifier)
             .IsUnique();
+
+        // Seed data
+        SeedData(modelBuilder);
+    }
+
+    private void SeedData(ModelBuilder modelBuilder)
+    {
+        // Create roles
+        var adminRoleId = Guid.NewGuid().ToString();
+        var userRoleId = Guid.NewGuid().ToString();
+
+        modelBuilder.Entity<IdentityRole>().HasData(
+            new IdentityRole
+            {
+                Id = adminRoleId,
+                Name = "admin",
+                NormalizedName = "ADMIN",
+                ConcurrencyStamp = Guid.NewGuid().ToString()
+            },
+            new IdentityRole
+            {
+                Id = userRoleId,
+                Name = "super_admin",
+                NormalizedName = "SUPER_ADMIN",
+                ConcurrencyStamp = Guid.NewGuid().ToString()
+            }
+        );
+
+        // Create default super admin user
+        var defaultAdminId = Guid.NewGuid().ToString();
+        var adminUser = new AdminUser
+        {
+            Id = defaultAdminId,
+            UserName = "admin@jainmunis.app",
+            NormalizedUserName = "ADMIN@JAINMUNIS.APP",
+            Email = "admin@jainmunis.app",
+            NormalizedEmail = "ADMIN@JAINMUNIS.APP",
+            EmailConfirmed = true,
+            PasswordHash = new PasswordHasher<AdminUser>().HashPassword(null, "Admin@123"),
+            SecurityStamp = Guid.NewGuid().ToString(),
+            ConcurrencyStamp = Guid.NewGuid().ToString(),
+            Role = "super_admin",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        modelBuilder.Entity<AdminUser>().HasData(adminUser);
+
+        // Assign admin role to default user
+        modelBuilder.Entity<IdentityUserRole<string>>().HasData(
+            new IdentityUserRole<string>
+            {
+                UserId = defaultAdminId,
+                RoleId = userRoleId,
+            }
+        );
+
+        // Seed sample locations
+        var mumbaiLocation = new Location
+        {
+            Id = Guid.NewGuid(),
+            Name = "Jain Temple, Dadar",
+            Address = "123 S.V. Road, Dadar West",
+            City = "Mumbai",
+            State = "Maharashtra",
+            Country = "India",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var delhiLocation = new Location
+        {
+            Id = Guid.NewGuid(),
+            Name = "Jain Temple, Delhi",
+            Address = "456 Ashok Road, Karol Bagh",
+            City = "Delhi",
+            State = "Delhi",
+            Country = "India",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        modelBuilder.Entity<Location>().HasData(mumbaiLocation, delhiLocation);
+
+        // Seed sample saints
+        var saint1 = new Saint
+        {
+            Id = Guid.NewGuid(),
+            Name = "Acharya Mahashraman",
+            Title = "Acharya",
+            SpiritualLineage = "Terapanth tradition",
+            Bio = "Current Acharya of the Terapanth tradition",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        var saint2 = new Saint
+        {
+            Id = Guid.NewGuid(),
+            Name = "Muni Sumermal",
+            Title = "Muni",
+            SpiritualLineage = "Terapanth tradition",
+            Bio = "Disciple of Acharya Mahashraman",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        modelBuilder.Entity<Saint>().HasData(saint1, saint2);
+
+        // Seed sample schedules
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        modelBuilder.Entity<Schedule>().HasData(
+            new Schedule
+            {
+                Id = Guid.NewGuid(),
+                SaintId = saint1.Id,
+                LocationId = mumbaiLocation.Id,
+                StartDate = today.AddDays(-1),
+                EndDate = today.AddDays(5),
+                Purpose = "Chaturmas",
+                Notes = "Daily discourses at 6:00 PM",
+                ContactPerson = "Ramesh Shah",
+                ContactPhone = "+91 9876543210",
+                CreatedBy = Guid.Parse(defaultAdminId),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            },
+            new Schedule
+            {
+                Id = Guid.NewGuid(),
+                SaintId = saint2.Id,
+                LocationId = delhiLocation.Id,
+                StartDate = today.AddDays(10),
+                EndDate = today.AddDays(15),
+                Purpose = "Pravachan",
+                Notes = "Special spiritual discourse series",
+                ContactPerson = "Suresh Jain",
+                ContactPhone = "+91 9876543211",
+                CreatedBy = Guid.Parse(defaultAdminId),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            }
+        );
     }
 }
