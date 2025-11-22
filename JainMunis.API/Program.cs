@@ -79,6 +79,9 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetSection("Redis").Value ?? "localhost:6379";
 });
 
+// Add monitoring and configuration services
+builder.Services.AddMonitoring(builder.Configuration, builder.Environment);
+
 // Custom services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISaintService, SaintService>();
