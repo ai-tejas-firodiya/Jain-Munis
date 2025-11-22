@@ -346,7 +346,7 @@ public class EmailService : IEmailService
             html += "</span></div>";
         }
 
-        var html = $@"
+        html += $@"
 <!DOCTYPE html>
 <html>
 <head>
