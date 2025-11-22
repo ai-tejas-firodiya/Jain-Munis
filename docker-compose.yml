@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: jainmunis-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong_password123
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - jainmunis-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: jainmunis-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - jainmunis-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./JainMunis.API
+      dockerfile: Dockerfile
+    container_name: jainmunis-backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=jain_munis_dev;User Id=sa;Password=YourStrong_password123;TrustServerCertificate=true
+      - Redis=redis:6379
+      - JwtSettings__SecretKey=dev_jwt_secret_key_here_change_in_production
+      - JwtSettings__ExpirationHours=24
+      - JwtSettings__Issuer=JainMunisApp
+      - JwtSettings__Audience=JainMunisApp
+    ports:
+      - "5000:80"
+    depends_on:
+      - sqlserver
+      - redis
+    volumes:
+      - ./JainMunis.API/uploads:/app/uploads
+    networks:
+      - jainmunis-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: jainmunis-frontend
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+    depends_on:
+      - backend
+    networks:
+      - jainmunis-network
+
+volumes:
+  sqlserver_data:
+  redis_data:
+
+networks:
+  jainmunis-network:
+    driver: bridge
