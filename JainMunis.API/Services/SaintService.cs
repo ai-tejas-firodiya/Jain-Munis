@@ -186,6 +186,7 @@ public class SaintService : ISaintService
 
     public async Task<string> UpdateSaintPhotoAsync(Guid id, IFormFile photoFile)
     {
+        await Task.CompletedTask;
         // TODO: Implement file upload logic
         // For now, return a placeholder URL
         return $"/uploads/saints/{id}/{Guid.NewGuid()}{Path.GetExtension(photoFile.FileName)}";
@@ -211,6 +212,7 @@ public class SaintService : ISaintService
 
     public async Task<List<SaintDto>> GetNearbySaintsAsync(decimal latitude, decimal longitude, int radiusKm)
     {
+        await Task.CompletedTask;
         // TODO: Implement geospatial query
         // For now, return empty list
         return new List<SaintDto>();

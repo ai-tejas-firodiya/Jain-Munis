@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using System.Text;
 using JainMunis.API.Data;
+using JainMunis.API.Models.Entities;
 using JainMunis.API.Services;
 using JainMunis.API.Config;
 
@@ -21,9 +23,8 @@ builder.Host.UseSerilog();
 // Add services to the container
 builder.Services.AddControllers();
 
-// Database context
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Database context and configuration
+builder.Services.AddDatabaseConfiguration(builder.Configuration, builder.Environment);
 
 // Identity
 builder.Services.AddIdentity<AdminUser, IdentityRole>(options =>

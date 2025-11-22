@@ -1,6 +1,7 @@
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -22,7 +23,7 @@ public class AWSS3FileStorageService : IFileStorageService
         var accessKey = _configuration.GetSection("FileStorage:AWSS3:AccessKey").Value;
         var secretKey = _configuration.GetSection("FileStorage:AWSS3:SecretKey").Value;
         var region = _configuration.GetSection("FileStorage:AWSS3:Region").Value ?? "ap-south-1";
-        _bucketName = _configuration.GetSection("FileStorage:AWSS3:BucketName").Value;
+        _bucketName = _configuration.GetSection("FileStorage:AWSS3:BucketName").Value ?? "";
 
         if (string.IsNullOrEmpty(accessKey) || string.IsNullOrEmpty(secretKey) || string.IsNullOrEmpty(_bucketName))
         {
@@ -62,18 +63,19 @@ public class AWSS3FileStorageService : IFileStorageService
                 Key = key,
                 InputStream = memoryStream,
                 ContentType = file.ContentType,
-                CannedACL = S3CannedACL.PublicRead,
-                Metadata = new Dictionary<string, string>
-                {
-                    ["OriginalName"] = file.FileName,
-                    ["UploadDate"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-                    ["FileSize"] = file.Length.ToString()
-                },
-                Tagging = new List<Tag>
-                {
-                    new Tag { Key = "Environment", Value = "Production" },
-                    new Tag { Key = "App", Value = "JainMunis" }
-                }
+                CannedACL = S3CannedACL.PublicRead
+            };
+
+            // Add metadata as object metadata instead of the read-only property
+            request.Metadata["OriginalName"] = file.FileName;
+            request.Metadata["UploadDate"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+            request.Metadata["FileSize"] = file.Length.ToString();
+
+            // Add tagging via TagSet
+            request.TagSet = new List<Tag>
+            {
+                new Tag { Key = "Environment", Value = "Production" },
+                new Tag { Key = "App", Value = "JainMunis" }
             };
 
             var response = await _s3Client.PutObjectAsync(request);
@@ -139,7 +141,7 @@ public class AWSS3FileStorageService : IFileStorageService
                 await _s3Client.GetObjectMetadataAsync(request);
                 return true;
             }
-            catch (Amazon.S3.AmazonS3Exception ex) when ex.StatusCode == System.Net.HttpStatusCode.NotFound
+            catch (Amazon.S3.AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return false;
             }
@@ -179,6 +181,7 @@ public class AWSS3FileStorageService : IFileStorageService
 
     public async Task<string> GeneratePresignedUrlAsync(string fileUrl, TimeSpan expiration)
     {
+        await Task.CompletedTask;
         try
         {
             var key = ExtractKeyFromUrl(fileUrl);
@@ -194,7 +197,7 @@ public class AWSS3FileStorageService : IFileStorageService
                 Expires = DateTime.UtcNow.Add(expiration)
             };
 
-            var url = await _s3Client.GetPreSignedURLAsync(request);
+            var url = _s3Client.GetPreSignedURL(request);
             return url;
         }
         catch (Exception ex)
@@ -250,7 +253,7 @@ public class AWSS3FileStorageService : IFileStorageService
         return $"{fileNameWithoutExtension}_{timestamp}_{guid}{extension}";
     }
 
-    private string ExtractKeyFromUrl(string fileUrl)
+    private string? ExtractKeyFromUrl(string fileUrl)
     {
         try
         {

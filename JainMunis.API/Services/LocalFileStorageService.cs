@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -66,6 +67,7 @@ public class LocalFileStorageService : IFileStorageService
 
     public async Task<bool> DeleteFileAsync(string fileUrl)
     {
+        await Task.CompletedTask;
         try
         {
             var relativePath = ExtractRelativePathFromUrl(fileUrl);
@@ -98,6 +100,7 @@ public class LocalFileStorageService : IFileStorageService
 
     public async Task<bool> FileExistsAsync(string fileUrl)
     {
+        await Task.CompletedTask;
         try
         {
             var relativePath = ExtractRelativePathFromUrl(fileUrl);
@@ -118,6 +121,7 @@ public class LocalFileStorageService : IFileStorageService
 
     public async Task<Stream?> DownloadFileAsync(string fileUrl)
     {
+        await Task.CompletedTask;
         try
         {
             var relativePath = ExtractRelativePathFromUrl(fileUrl);
@@ -144,6 +148,7 @@ public class LocalFileStorageService : IFileStorageService
 
     public async Task<string> GeneratePresignedUrlAsync(string fileUrl, TimeSpan expiration)
     {
+        await Task.CompletedTask;
         // Local storage doesn't support presigned URLs like cloud providers
         // Return the regular URL - in a real implementation, you might implement
         // a temporary token-based system
@@ -196,7 +201,7 @@ public class LocalFileStorageService : IFileStorageService
         return $"{fileNameWithoutExtension}_{timestamp}_{guid}{extension}";
     }
 
-    private string ExtractRelativePathFromUrl(string fileUrl)
+    private string? ExtractRelativePathFromUrl(string fileUrl)
     {
         try
         {

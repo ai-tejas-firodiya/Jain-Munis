@@ -1,11 +1,15 @@
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Core;
 using Serilog.Events;
+using JainMunis.API.Data;
 using System.Reflection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace JainMunis.API.Config;
 
@@ -20,40 +24,15 @@ public static class MonitoringConfiguration
         var appInsightsConnectionString = configuration.GetConnectionString("ApplicationInsights:ConnectionString");
         if (!string.IsNullOrEmpty(appInsightsConnectionString))
         {
-            services.AddApplicationInsights(appInsightsConnectionString);
+            services.AddApplicationInsightsTelemetry(options =>
+            {
+                options.ConnectionString = appInsightsConnectionString;
+            });
 
             services.Configure<TelemetryConfiguration>((telemetryConfiguration) =>
             {
                 telemetryConfiguration.ConnectionString = appInsightsConnectionString;
                 telemetryConfiguration.TelemetryInitializers.Add(new TelemetryInitializer());
-                telemetryConfiguration.ApplicationInsightsChannel.TelemetryProcessors.Add(new ExceptionTelemetryProcessor());
-                telemetryConfiguration.ApplicationInsightsChannel.TelemetryProcessors.Add(new SensitiveDataProcessor());
-            });
-        }
-
-        // Add Sentry if DSN is provided
-        var sentryDsn = configuration.GetSection("Monitoring:Sentry:Dsn").Value;
-        if (!string.IsNullOrEmpty(sentryDsn))
-        {
-            services.AddSentry(options =>
-            {
-                options.Dsn = sentryDsn;
-                options.TracesSampleRate = configuration.GetValue<double>("Monitoring:Sentry:TracesSampleRate", 0.1);
-                options.Environment = environment.EnvironmentName;
-                options.Debug = configuration.GetValue<bool>("Monitoring:Sentry:Debug", false);
-                options.Release = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
-                options.BeforeSend = sentryEvent =>
-                {
-                    // Filter out certain events
-                    if (sentryEvent.Exception?.Message?.Contains("TaskCancelledException") == true)
-                        return false;
-
-                    // Filter out health check requests
-                    if (sentryEvent.Request?.Url?.Contains("/health") == true)
-                        return false;
-
-                    return true;
-                };
             });
         }
 
@@ -66,26 +45,18 @@ public static class MonitoringConfiguration
         return services;
     }
 
-    public static ILoggingBuilder ConfigureLogging(this ILoggingBuilder builder, IWebHostEnvironment environment)
+    public static ILoggingBuilder ConfigureLogging(this ILoggingBuilder builder, IConfiguration configuration, IWebHostEnvironment environment)
     {
         // Configure Serilog
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .Enrich.FromLogContext()
-            .Enrich.FromEnvironment()
-            .Enrich.WithMachineName()
-            .Enrich.WithProcessId()
-            .WriteTo.Console(restrictedToMinimumLevel: environment.IsProduction())
+            .WriteTo.Console(restrictedToMinimumLevel: environment.IsProduction() ? LogEventLevel.Information : LogEventLevel.Debug)
             .WriteTo.File("logs/jainmunis-.log",
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 30,
-                restrictedToMinimumLevel: environment.IsProduction(),
-                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}",
-                formatter: new Serilog.Formatting.Json.JsonFormatter())
-                .WriteTo.Seq("logs/application",
-                    restrictedToMinimumLevel: environment.IsProduction(),
-                    batchSink: new ApplicationInsightsSink(appInsightsConnectionString)
-                )
+                restrictedToMinimumLevel: environment.IsProduction() ? LogEventLevel.Information : LogEventLevel.Debug,
+                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
         builder.ClearProviders();
@@ -101,15 +72,25 @@ public class TelemetryInitializer : ITelemetryInitializer
     public void Initialize(ITelemetry telemetry)
     {
         // Add custom properties to all telemetry
-        telemetry.Context.Properties["Environment"] = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown";
-        telemetry.Context.Properties["MachineName"] = Environment.MachineName;
-        telemetry.Context.Properties["ProcessId"] = Environment.ProcessId;
+        if (telemetry is ISupportProperties telemetryWithProperties)
+        {
+            telemetryWithProperties.Properties["Environment"] = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown";
+            telemetryWithProperties.Properties["MachineName"] = Environment.MachineName;
+            telemetryWithProperties.Properties["ProcessId"] = Environment.ProcessId.ToString();
+        }
     }
 }
 
 // Exception Telemetry Processor
 public class ExceptionTelemetryProcessor : ITelemetryProcessor
 {
+    private ITelemetryProcessor? _next;
+
+    public ExceptionTelemetryProcessor(ITelemetryProcessor? next = null)
+    {
+        _next = next;
+    }
+
     public void Process(ITelemetry telemetry)
     {
         if (telemetry is ExceptionTelemetry exceptionTelemetry)
@@ -119,41 +100,51 @@ public class ExceptionTelemetryProcessor : ITelemetryProcessor
             // Filter out common exceptions
             if (exception is TaskCanceledException ||
                 exception is OperationCanceledException ||
-                exception.Message?.Contains("connection") == true)
+                exception?.Message?.Contains("connection") == true)
             {
-                telemetry.OmitTelemetry = true;
+                return; // Don't process this telemetry
             }
         }
+
+        _next?.Process(telemetry);
     }
 }
 
 // Sensitive Data Processor
 public class SensitiveDataProcessor : ITelemetryProcessor
 {
+    private ITelemetryProcessor? _next;
     private readonly HashSet<string> _sensitiveHeaders = new()
     {
         "Authorization", "Cookie", "X-API-Key", "X-Forwarded-For",
         "Set-Cookie", "WWW-Authenticate"
     };
 
+    public SensitiveDataProcessor(ITelemetryProcessor? next = null)
+    {
+        _next = next;
+    }
+
     public void Process(ITelemetry telemetry)
     {
         if (telemetry is RequestTelemetry requestTelemetry)
         {
-            // Sanitize sensitive headers
+            // Sanitize sensitive properties
             foreach (var header in _sensitiveHeaders)
             {
-                if (requestTelemetry.Headers.ContainsKey(header))
+                if (requestTelemetry.Properties.ContainsKey(header))
                 {
-                    requestTelemetry.Headers[header] = "***";
+                    requestTelemetry.Properties[header] = "***";
                 }
             }
         }
+
+        _next?.Process(telemetry);
     }
 }
 
 // Health Checks
-public class DatabaseHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
+public class DatabaseHealthCheck : IHealthCheck
 {
     private readonly ApplicationDbContext _context;
 
@@ -162,23 +153,23 @@ public class DatabaseHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks
         _context = context;
     }
 
-    public async Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(
-        Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context,
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
         try
         {
             await _context.Database.CanConnectAsync(cancellationToken);
-            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("Database connection successful");
+            return HealthCheckResult.Healthy("Database connection successful");
         }
         catch (Exception ex)
         {
-            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy("Database connection failed", ex);
+            return HealthCheckResult.Unhealthy("Database connection failed", ex);
         }
     }
 }
 
-public class RedisHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
+public class RedisHealthCheck : IHealthCheck
 {
     private readonly IConfiguration _configuration;
 
@@ -187,8 +178,8 @@ public class RedisHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IH
         _configuration = configuration;
     }
 
-    public async Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(
-        Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context,
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
         try
@@ -196,23 +187,23 @@ public class RedisHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IH
             var redisConnection = _configuration.GetConnectionString("Redis");
             if (string.IsNullOrEmpty(redisConnection))
             {
-                return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("Redis not configured");
+                return HealthCheckResult.Healthy("Redis not configured");
             }
 
             // Add actual Redis connection check here
-            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("Redis connection successful");
+            return HealthCheckResult.Healthy("Redis connection successful");
         }
         catch (Exception ex)
         {
-            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy("Redis connection failed", ex);
+            return HealthCheckResult.Unhealthy("Redis connection failed", ex);
         }
     }
 }
 
-public class ExternalServiceHealthCheck : Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck
+public class ExternalServiceHealthCheck : IHealthCheck
 {
-    public async Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult> CheckHealthAsync(
-        Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext context,
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
         try
@@ -222,10 +213,10 @@ public class ExternalServiceHealthCheck : Microsoft.Extensions.Diagnostics.Healt
             if (!string.IsNullOrEmpty(mapboxToken))
             {
                 using var client = new HttpClient();
-                var response = await client.GetAsync($"https://api.mapbox.com/styles/v1/mapbox/streets-v11?access_token={mapboxToken}&limit=1");
-                if (!response.IsSuccess)
+                var response = await client.GetAsync($"https://api.mapbox.com/styles/v1/mapbox/streets-v11?access_token={mapboxToken}&limit=1", cancellationToken);
+                if (!response.IsSuccessStatusCode)
                 {
-                    return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Degraded("Mapbox API is not accessible");
+                    return HealthCheckResult.Degraded("Mapbox API is not accessible");
                 }
             }
 
@@ -234,22 +225,20 @@ public class ExternalServiceHealthCheck : Microsoft.Extensions.Diagnostics.Healt
             if (!string.IsNullOrEmpty(sendgridKey))
             {
                 using var client = new HttpClient();
-                var response = await client.GetAsync("https://api.sendgrid.com/v3/user/profile",
-                    new Dictionary<string, string>
-                    {
-                        ["Authorization"] = $"Bearer {sendgridKey}"
-                    });
-                if (!response.IsSuccess)
+                var request = new HttpRequestMessage(HttpMethod.Get, "https://api.sendgrid.com/v3/user/profile");
+                request.Headers.Add("Authorization", $"Bearer {sendgridKey}");
+                var response = await client.SendAsync(request, cancellationToken);
+                if (!response.IsSuccessStatusCode)
                 {
-                    return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Degraded("SendGrid API is not accessible");
+                    return HealthCheckResult.Degraded("SendGrid API is not accessible");
                 }
             }
 
-            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("All external services are accessible");
+            return HealthCheckResult.Healthy("All external services are accessible");
         }
         catch (Exception ex)
         {
-            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy("External services check failed", ex);
+            return HealthCheckResult.Unhealthy("External services check failed", ex);
         }
     }
 }
@@ -260,13 +249,14 @@ public class ApplicationInsightsSink : ILogEventSink, IDisposable
     private readonly TelemetryConfiguration _telemetryConfiguration;
     private readonly TelemetryClient _telemetryClient;
 
-    public ApplicationInsightSink(string connectionString)
+    public ApplicationInsightsSink(string connectionString)
     {
-        _telemetryConfiguration = new TelemetryConfiguration(connectionString);
+        _telemetryConfiguration = new TelemetryConfiguration();
+        _telemetryConfiguration.ConnectionString = connectionString;
         _telemetryClient = new TelemetryClient(_telemetryConfiguration);
     }
 
-    public Emit(LogEvent logEvent)
+    public void Emit(LogEvent logEvent)
     {
         if (logEvent.Level == LogEventLevel.Fatal || logEvent.Level == LogEventLevel.Error)
         {
@@ -274,7 +264,7 @@ public class ApplicationInsightsSink : ILogEventSink, IDisposable
             {
                 ["LogLevel"] = logEvent.Level.ToString(),
                 ["MessageTemplate"] = logEvent.MessageTemplate?.ToString() ?? "",
-                ["RenderedMessage"] = logEvent.RenderMessage ?? ""
+                ["RenderedMessage"] = logEvent.RenderMessage() ?? ""
             });
         }
     }

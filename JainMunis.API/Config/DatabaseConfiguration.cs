@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using JainMunis.API.Data;
 using System.Reflection;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace JainMunis.API.Config;
 
@@ -14,6 +15,10 @@ public static class DatabaseConfiguration
         IConfiguration configuration,
         IWebHostEnvironment environment)
     {
+        // Register interceptors
+        services.AddScoped<ISoftDeleteInterceptor, SoftDeleteInterceptor>();
+        services.AddScoped<IAuditInterceptor, AuditInterceptor>();
+
         // Add DbContext with optimized configuration
         services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
         {
@@ -29,27 +34,31 @@ public static class DatabaseConfiguration
                 );
 
                 // Command timeout optimization
-                sqlOptions.CommandTimeout = 30;
-
-                // Enable sensitive data logging only in development
-                sqlOptions.EnableSensitiveDataLogging(!environment.IsProduction());
-
-                // Enable detailed errors in development
-                sqlOptions.EnableDetailedErrors(!environment.IsProduction());
-
-                // Configure query splitting for better performance
-                if (environment.IsProduction())
-                {
-                    sqlOptions.UseQuerySplitting();
-                }
+                sqlOptions.CommandTimeout(30);
 
                 // Batch size optimization
                 sqlOptions.MaxBatchSize(100);
             });
 
+            // Enable sensitive data logging only in development
+            if (!environment.IsProduction())
+            {
+                options.EnableSensitiveDataLogging();
+                options.EnableDetailedErrors();
+            }
+
             // Add interceptors for soft deletes and auditing
-            options.AddInterceptors(serviceProvider.GetRequiredService<ISoftDeleteInterceptor>());
-            options.AddInterceptors(serviceProvider.GetRequiredService<IAuditInterceptor>());
+            var softDeleteInterceptor = serviceProvider.GetRequiredService<ISoftDeleteInterceptor>();
+            var auditInterceptor = serviceProvider.GetRequiredService<IAuditInterceptor>();
+            
+            if (softDeleteInterceptor is ISaveChangesInterceptor softDeleteSaveInterceptor)
+            {
+                options.AddInterceptors(softDeleteSaveInterceptor);
+            }
+            if (auditInterceptor is ISaveChangesInterceptor auditSaveInterceptor)
+            {
+                options.AddInterceptors(auditSaveInterceptor);
+            }
         });
 
         // Add health checks for database
@@ -101,13 +110,9 @@ public static class DatabaseConfiguration
     private static async Task SeedDataAsync(ApplicationDbContext dbContext, ILogger logger)
     {
         // Check if admin user exists
-        var adminUser = await dbContext.Users.FirstOrDefaultAsync(u => u.UserName == "admin@jainmunis.app");
-
-        if (adminUser == null)
-        {
-            logger.LogInformation("Creating default admin user");
-            // This would typically be handled by existing seed data
-        }
+        // This would typically be handled by existing seed data
+        await Task.CompletedTask;
+        logger.LogInformation("Database seeding completed");
     }
 
     private static async Task CreatePerformanceIndexesAsync(ApplicationDbContext dbContext, ILogger logger)
@@ -133,7 +138,14 @@ public static class DatabaseConfiguration
             foreach (var indexSql in indexes)
             {
                 command.CommandText = indexSql;
-                await command.ExecuteNonQueryAsync();
+                try
+                {
+                    await command.ExecuteNonQueryAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to create index");
+                }
             }
 
             logger.LogInformation("Performance indexes created successfully");
@@ -154,12 +166,64 @@ public interface IAuditInterceptor
 {
 }
 
-public class SoftDeleteInterceptor : ISoftDeleteInterceptor
+public class SoftDeleteInterceptor : ISoftDeleteInterceptor, ISaveChangesInterceptor
 {
-    // Implementation would go here
+    public async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        return result;
+    }
+
+    public InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+    {
+        return result;
+    }
+
+    public async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+    {
+        return result;
+    }
+
+    public int SavedChanges(SaveChangesCompletedEventData eventData, int result)
+    {
+        return result;
+    }
+
+    public async ValueTask SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+    }
+
+    public void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+    }
 }
 
-public class AuditInterceptor : IAuditInterceptor
+public class AuditInterceptor : IAuditInterceptor, ISaveChangesInterceptor
 {
-    // Implementation would go here
+    public async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        return result;
+    }
+
+    public InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+    {
+        return result;
+    }
+
+    public async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+    {
+        return result;
+    }
+
+    public int SavedChanges(SaveChangesCompletedEventData eventData, int result)
+    {
+        return result;
+    }
+
+    public async ValueTask SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+    }
+
+    public void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+    }
 }

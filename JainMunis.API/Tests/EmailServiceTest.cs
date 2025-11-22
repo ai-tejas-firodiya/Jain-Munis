@@ -12,12 +12,12 @@ public class EmailServiceTest
     private IEmailService CreateEmailService()
     {
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new[]
+            .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                new KeyValuePair<string, string>("EmailService:SendGrid:ApiKey", "SG.test_key"),
-                new KeyValuePair<string, string>("EmailService:SendGrid:FromEmail", "test@example.com"),
-                new KeyValuePair<string, string>("EmailService:SendGrid:FromName", "Test App"),
-                new KeyValuePair<string, string>("App:BaseUrl", "https://example.com")
+                ["EmailService:SendGrid:ApiKey"] = "SG.test_key",
+                ["EmailService:SendGrid:FromEmail"] = "test@example.com",
+                ["EmailService:SendGrid:FromName"] = "Test App",
+                ["App:BaseUrl"] = "https://example.com"
             })
             .Build();
 

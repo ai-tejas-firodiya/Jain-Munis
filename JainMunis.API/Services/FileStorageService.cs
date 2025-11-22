@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using System.Security.Cryptography;
@@ -72,20 +73,12 @@ public class FileStorageService : IFileStorageService
                 ["MD5Hash"] = await CalculateMD5Hash(file)
             };
 
-            // Upload file
+            // Upload file with simplified options
             using var stream = file.OpenReadStream();
             await blobClient.UploadAsync(stream, new BlobUploadOptions
             {
                 HttpHeaders = blobHttpHeaders,
-                Metadata = metadata,
-                TransferOptions = new StorageTransferOptions
-                {
-                    InitialTransferOptions = new StorageTransferOptions
-                    {
-                        MaximumTransferSize = 4 * 1024 * 1024, // 4MB chunks
-                        InitialTransferSize = 4 * 1024 * 1024
-                    }
-                }
+                Metadata = metadata
             });
 
             var fileUrl = blobClient.Uri.ToString();
@@ -271,7 +264,7 @@ public class FileStorageService : IFileStorageService
         return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
     }
 
-    private string ExtractBlobNameFromUrl(string fileUrl)
+    private string? ExtractBlobNameFromUrl(string fileUrl)
     {
         try
         {
