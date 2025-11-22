@@ -84,6 +84,27 @@ builder.Services.AddScoped<ISaintService, SaintService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddSingleton<IJwtService, JwtService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+
+// File storage service - register based on configuration
+var fileStorageProvider = builder.Configuration.GetSection("FileStorage:Provider").Value ?? "LocalStorage";
+
+switch (fileStorageProvider.ToLowerInvariant())
+{
+    case "azblobstorage":
+    case "azure":
+        builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+        break;
+    case "awss3":
+    case "s3":
+        builder.Services.AddScoped<IFileStorageService, AWSS3FileStorageService>();
+        break;
+    case "local":
+    case "localstorage":
+    default:
+        builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        break;
+}
 
 // Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
