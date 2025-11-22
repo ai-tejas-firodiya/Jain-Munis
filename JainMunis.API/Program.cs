@@ -6,6 +6,7 @@ using Serilog;
 using System.Text;
 using JainMunis.API.Data;
 using JainMunis.API.Services;
+using JainMunis.API.Config;
 
 var builder = WebApplication.CreateBuilder(args);
 
