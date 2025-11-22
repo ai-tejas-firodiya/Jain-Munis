@@ -346,6 +346,53 @@ public class EmailService : IEmailService
             html += "</span></div>";
         }
 
+        var html = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title>Schedule Update - {saintName}</title>
+</head>
+<body style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
+    <div style='background-color: #e8f5e8; padding: 20px; border-radius: 8px; text-align: center; border-left: 5px solid #28a745;'>
+        <h1 style='color: #155724; margin: 0;'>🙏 Schedule Update</h1>
+        <p style='color: #155724; margin: 10px 0; font-size: 18px;'>
+            {saintTitle} {saintName}
+        </p>
+    </div>
+
+    <div style='margin: 20px 0; background-color: #ffffff; border: 1px solid #e1e8ed; border-radius: 8px; padding: 20px;'>
+        <h2 style='color: #2c3e50; margin: 0 0 15px 0;'>📍 {locationName}</h2>
+
+        <div style='margin: 10px 0;'>
+            <strong style='color: #2c3e50;'>📅 Visit Period:</strong><br>
+            <span style='color: #7f8c8d;'>{startDate} to {endDate}</span>
+        </div>";
+
+        if (!string.IsNullOrEmpty(purpose))
+        {
+            html += $@"
+        <div style='margin: 10px 0;'>
+            <strong style='color: #2c3e50;'>🎯 Purpose:</strong><br>
+            <span style='color: #7f8c8d;'>{purpose}</span>
+        </div>";
+        }
+
+        if (!string.IsNullOrEmpty(contactPerson))
+        {
+            html += $@"
+        <div style='margin: 10px 0;'>
+            <strong style='color: #2c3e50;'>📞 Local Contact:</strong><br>
+            <span style='color: #7f8c8d;'>{contactPerson}";
+
+            if (!string.IsNullOrEmpty(contactPhone))
+            {
+                html += $" - {contactPhone}";
+            }
+
+            html += "</span></div>";
+        }
+
         html += @"
         <div style='text-align: center; margin-top: 20px;'>
             <a href='[ViewDetailsLink]' style='background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;'>
@@ -363,7 +410,7 @@ public class EmailService : IEmailService
 </body>
 </html>";
 
-        return "";
+        return html;
     }
 
     private string GenerateScheduleNotificationText(Dictionary<string, object> scheduleData)
