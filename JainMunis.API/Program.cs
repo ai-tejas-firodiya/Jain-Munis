@@ -2,12 +2,12 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Hosting;
 using Serilog;
 using System.Text;
 using JainMunis.API.Data;
 using JainMunis.API.Services;
-using JainMunis.API.Models.Entities;
-using Microsoft.AspNetCore.Identity;
+using JainMunis.API.Config;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -80,12 +80,36 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetSection("Redis").Value ?? "localhost:6379";
 });
 
+// Add monitoring and configuration services
+builder.Services.AddMonitoring(builder.Configuration, builder.Environment);
+
 // Custom services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISaintService, SaintService>();
 builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddSingleton<IJwtService, JwtService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+
+// File storage service - register based on configuration
+var fileStorageProvider = builder.Configuration.GetSection("FileStorage:Provider").Value ?? "LocalStorage";
+
+switch (fileStorageProvider.ToLowerInvariant())
+{
+    case "azblobstorage":
+    case "azure":
+        builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+        break;
+    case "awss3":
+    case "s3":
+        builder.Services.AddScoped<IFileStorageService, AWSS3FileStorageService>();
+        break;
+    case "local":
+    case "localstorage":
+    default:
+        builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        break;
+}
 
 // Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
