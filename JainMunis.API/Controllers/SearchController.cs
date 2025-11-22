@@ -111,16 +111,14 @@ public class SearchController : ControllerBase
             }
 
             var searchTerm = query.ToLower();
+            var cities = await _locationService.GetCitiesAsync(searchTerm);
+            
             var suggestions = new
             {
                 saints = new List<object>(),
                 locations = new List<object>(),
-                cities = new List<string>()
+                cities = cities.Take(10).ToList()
             };
-
-            // Get city suggestions
-            var cities = await _locationService.GetCitiesAsync(searchTerm);
-            suggestions.cities = cities.Take(10).ToList();
 
             // TODO: Add saint and location name suggestions
             // This would require implementing search methods in the services
@@ -158,20 +156,6 @@ public class SearchController : ControllerBase
             if (limit < 1) limit = 20;
             if (limit > 100) limit = 100;
 
-            var result = new
-            {
-                saints = new List<SaintDto>(),
-                schedules = new List<ScheduleDto>(),
-                locations = new List<LocationDto>(),
-                pagination = new
-                {
-                    page,
-                    limit,
-                    total = 0,
-                    totalPages = 0
-                }
-            };
-
             // Search saints
             var saintSearchParams = new SearchParams
             {
@@ -181,7 +165,9 @@ public class SearchController : ControllerBase
             };
 
             var (saints, saintTotal) = await _saintService.GetSaintsAsync(page, limit, saintSearchParams);
-            result.saints = saints;
+
+            var schedules = new List<ScheduleDto>();
+            var locations = new List<LocationDto>();
 
             // Search schedules if date range provided
             if (dateFrom.HasValue || dateTo.HasValue || !string.IsNullOrWhiteSpace(city))
@@ -195,13 +181,12 @@ public class SearchController : ControllerBase
 
                 if (currentOnly)
                 {
-                    var currentSchedules = await _scheduleService.GetCurrentSchedulesAsync(scheduleSearchParams);
-                    result.schedules = currentSchedules;
+                    schedules = await _scheduleService.GetCurrentSchedulesAsync(scheduleSearchParams);
                 }
                 else
                 {
-                    var (schedules, scheduleTotal) = await _scheduleService.GetSchedulesAsync(page, limit, scheduleSearchParams);
-                    result.schedules = schedules;
+                    var (schedulesData, scheduleTotal) = await _scheduleService.GetSchedulesAsync(page, limit, scheduleSearchParams);
+                    schedules = schedulesData;
                 }
             }
 
@@ -214,13 +199,27 @@ public class SearchController : ControllerBase
                     State = state
                 };
 
-                var (locations, locationTotal) = await _locationService.GetLocationsAsync(page, limit, locationSearchParams);
-                result.locations = locations;
+                var (locationsData, locationTotal) = await _locationService.GetLocationsAsync(page, limit, locationSearchParams);
+                locations = locationsData;
             }
 
             // Calculate total
-            result.pagination.total = saintTotal + result.schedules.Count + result.locations.Count;
-            result.pagination.totalPages = (int)Math.Ceiling((double)result.pagination.total / limit);
+            var total = saintTotal + schedules.Count + locations.Count;
+            var totalPages = (int)Math.Ceiling((double)total / limit);
+
+            var result = new
+            {
+                saints,
+                schedules,
+                locations,
+                pagination = new
+                {
+                    page,
+                    limit,
+                    total,
+                    totalPages
+                }
+            };
 
             return Ok(new ApiResponse<object> { Data = result });
         }

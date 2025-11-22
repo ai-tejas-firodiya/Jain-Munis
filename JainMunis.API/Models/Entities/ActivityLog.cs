@@ -8,7 +8,7 @@ public class ActivityLog
     [Key]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid? AdminUserId { get; set; }
+    public string? AdminUserId { get; set; }
 
     [ForeignKey("AdminUserId")]
     public virtual AdminUser? AdminUser { get; set; }

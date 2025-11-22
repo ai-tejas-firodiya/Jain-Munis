@@ -122,7 +122,7 @@ public class SchedulesController : ControllerBase
 
             // Get current user ID from claims
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            var createdBy = userIdClaim != null ? Guid.Parse(userIdClaim.Value) : (Guid?)null;
+            var createdBy = userIdClaim?.Value;
 
             var schedule = await _scheduleService.CreateScheduleAsync(request, createdBy);
             return Ok(new ApiResponse<ScheduleDto> { Data = schedule });
@@ -173,7 +173,7 @@ public class SchedulesController : ControllerBase
 
             // Get current user ID from claims
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            var updatedBy = userIdClaim != null ? Guid.Parse(userIdClaim.Value) : (Guid?)null;
+            var updatedBy = userIdClaim?.Value;
 
             var schedule = await _scheduleService.UpdateScheduleAsync(id, request, updatedBy);
             if (schedule == null)

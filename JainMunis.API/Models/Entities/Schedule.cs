@@ -36,7 +36,7 @@ public class Schedule
     [MaxLength(20)]
     public string? ContactPhone { get; set; }
 
-    public Guid? CreatedBy { get; set; } // admin user who created this entry
+    public string? CreatedBy { get; set; } // admin user who created this entry
 
     [ForeignKey("CreatedBy")]
     public virtual AdminUser? Creator { get; set; }

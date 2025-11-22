@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using JainMunis.API.Models.DTOs;
 using JainMunis.API.Services;
@@ -70,7 +71,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("logout")]
     [Authorize]
-    public async Task<ActionResult<ApiResponse<object>>> Logout()
+    public ActionResult<ApiResponse<object>> Logout()
     {
         try
         {
@@ -151,14 +152,7 @@ public class AuthController : ControllerBase
             var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value;
             if (currentUserRole != "super_admin")
             {
-                return Forbid(new ErrorResponse
-                {
-                    Error = new ErrorDetail
-                    {
-                        Code = "INSUFFICIENT_PERMISSIONS",
-                        Message = "Requires super_admin role"
-                    }
-                }.ToString());
+                return Forbid();
             }
 
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
@@ -226,7 +220,7 @@ public class AuthController : ControllerBase
 
             var userDto = new UserDto
             {
-                Id = user.Id,
+                Id = Guid.Parse(user.Id),
                 Username = user.UserName!,
                 Email = user.Email!,
                 Role = user.Role ?? "admin",
@@ -263,14 +257,7 @@ public class AuthController : ControllerBase
             var currentUserRole = User.FindFirst(ClaimTypes.Role)?.Value;
             if (currentUserRole != "super_admin")
             {
-                return Forbid(new ErrorResponse
-                {
-                    Error = new ErrorDetail
-                    {
-                        Code = "INSUFFICIENT_PERMISSIONS",
-                        Message = "Requires super_admin role"
-                    }
-                }.ToString());
+                return Forbid();
             }
 
             var users = _userManager.Users.AsQueryable();
@@ -294,7 +281,7 @@ public class AuthController : ControllerBase
 
             var userDtos = userList.Select(u => new UserDto
             {
-                Id = u.Id,
+                Id = Guid.Parse(u.Id),
                 Username = u.UserName!,
                 Email = u.Email!,
                 Role = u.Role ?? "admin",

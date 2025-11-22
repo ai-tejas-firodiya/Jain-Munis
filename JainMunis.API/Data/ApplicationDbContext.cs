@@ -58,7 +58,7 @@ public class ApplicationDbContext : IdentityDbContext<AdminUser>
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
 
             // Add constraint for valid date range
-            entity.HasCheckConstraint("CK_Schedules_ValidDateRange", "[EndDate] >= [StartDate]");
+            entity.ToTable(t => t.HasCheckConstraint("CK_Schedules_ValidDateRange", "[EndDate] >= [StartDate]"));
 
             // Configure relationships
             entity.HasOne(s => s.Saint)
@@ -70,11 +70,6 @@ public class ApplicationDbContext : IdentityDbContext<AdminUser>
                 .WithMany(l => l.Schedules)
                 .HasForeignKey(s => s.LocationId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(s => s.Creator)
-                .WithMany(u => u.ActivityLogs)
-                .HasForeignKey(s => s.CreatedBy)
-                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // Configure AdminUser entity
@@ -160,6 +155,7 @@ public class ApplicationDbContext : IdentityDbContext<AdminUser>
 
         // Create default super admin user
         var defaultAdminId = Guid.NewGuid().ToString();
+        var hasher = new PasswordHasher<AdminUser>();
         var adminUser = new AdminUser
         {
             Id = defaultAdminId,
@@ -168,7 +164,7 @@ public class ApplicationDbContext : IdentityDbContext<AdminUser>
             Email = "admin@jainmunis.app",
             NormalizedEmail = "ADMIN@JAINMUNIS.APP",
             EmailConfirmed = true,
-            PasswordHash = new PasswordHasher<AdminUser>().HashPassword(null, "Admin@123"),
+            PasswordHash = hasher.HashPassword(new AdminUser(), "Admin@123"),
             SecurityStamp = Guid.NewGuid().ToString(),
             ConcurrencyStamp = Guid.NewGuid().ToString(),
             Role = "super_admin",
@@ -254,7 +250,7 @@ public class ApplicationDbContext : IdentityDbContext<AdminUser>
                 Notes = "Daily discourses at 6:00 PM",
                 ContactPerson = "Ramesh Shah",
                 ContactPhone = "+91 9876543210",
-                CreatedBy = Guid.Parse(defaultAdminId),
+                CreatedBy = defaultAdminId,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             },
@@ -269,7 +265,7 @@ public class ApplicationDbContext : IdentityDbContext<AdminUser>
                 Notes = "Special spiritual discourse series",
                 ContactPerson = "Suresh Jain",
                 ContactPhone = "+91 9876543211",
-                CreatedBy = Guid.Parse(defaultAdminId),
+                CreatedBy = defaultAdminId,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             }
